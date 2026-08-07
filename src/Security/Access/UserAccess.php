@@ -4,6 +4,7 @@ namespace App\Security\Access;
 
 use App\Entity\User;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
+use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 
 class UserAccess extends Voter
@@ -19,7 +20,7 @@ class UserAccess extends Voter
             && ($subject instanceof User || $subject === null);
     }
 
-    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token): bool
+    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
         if (in_array('ROLE_ROOT', $token->getRoleNames(), true)) {
             return true;
