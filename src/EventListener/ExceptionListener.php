@@ -2,6 +2,7 @@
 
 namespace App\EventListener;
 
+use App\Exception\DuplicateUserException;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -36,7 +37,7 @@ class ExceptionListener
                 'error' => 'validation_failed',
                 'details' => $this->formatErrors($validationException),
             ];
-        } elseif ($exception instanceof UniqueConstraintViolationException) {
+        } elseif ($exception instanceof UniqueConstraintViolationException || $exception instanceof DuplicateUserException) {
             $status = 422;
             $data = ['error' => 'duplicate_entry'];
         } elseif ($exception instanceof AuthenticationException) {

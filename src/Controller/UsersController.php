@@ -2,45 +2,37 @@
 
 namespace App\Controller;
 
+use App\Dto\Response\UserResponse;
 use App\Entity\User;
-use App\Repository\UsersRepository;
 use App\Requests\CreateUserRequest;
 use App\Requests\UpdateUserRequest;
 use App\Security\Access\UserAccess;
-use Doctrine\ORM\EntityManagerInterface;
+use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
-use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/v1/api/users')]
 class UsersController extends AbstractController
 {
     public function __construct(
-        private readonly UsersRepository $users,
-        private readonly EntityManagerInterface $em,
-        private readonly UserPasswordHasherInterface $passwordHasher,
-    ){}
+        private readonly UserService $userService,
+    ) {}
 
     #[Route('', methods: ['GET'])]
     public function usersList(): JsonResponse
     {
         if ($this->isGranted('ROLE_ROOT')) {
-            $users = $this->users->findAll();
+            $users = $this->userService->findAll();
         } else {
             $userItem = $this->getUser();
             $users = $userItem instanceof User ? [$userItem] : [];
         }
 
-        return $this->json(
-            $users,
-            Response::HTTP_OK,
-            [],
-            ['groups' => 'user:read']
-        );
+        return $this->json(UserResponse::fromEntities($users), Response::HTTP_OK);
     }
 
     #[Route('/{id}', requirements: ['id' => '\d+'], methods: ['GET'])]
@@ -48,12 +40,7 @@ class UsersController extends AbstractController
     {
         $this->denyAccessUnlessGranted(UserAccess::VIEW, $user);
 
-        return $this->json(
-            $user,
-            Response::HTTP_OK,
-            [],
-            ['groups' => 'user:read']
-        );
+        return $this->json(UserResponse::fromEntity($user), Response::HTTP_OK);
     }
 
     #[Route('', methods: ['POST'])]
@@ -61,24 +48,9 @@ class UsersController extends AbstractController
     {
         $this->denyAccessUnlessGranted(UserAccess::CREATE);
 
-        if ($this->users->userExists($createUserRequest->login, $createUserRequest->pass)) {
-            return $this->json(['error' => 'duplicate_entry'], Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
+        $user = $this->userService->create($createUserRequest);
 
-        $user = new User();
-        $user->setLogin($createUserRequest->login);
-        $user->setPhone($createUserRequest->phone);
-        $user->setPass($this->passwordHasher->hashPassword($user, $createUserRequest->pass));
-
-        $this->em->persist($user);
-        $this->em->flush();
-
-        return $this->json(
-            $user,
-            Response::HTTP_CREATED,
-            [],
-            ['groups' => 'user:read']
-        );
+        return $this->json(UserResponse::fromEntity($user), Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', requirements: ['id' => '\d+'], methods: ['PUT'])]
@@ -86,25 +58,9 @@ class UsersController extends AbstractController
     {
         $this->denyAccessUnlessGranted(UserAccess::EDIT, $user);
 
-        $user->setLogin($updateUserRequest->login);
-        $user->setPhone($updateUserRequest->phone);
+        $user = $this->userService->update($user, $updateUserRequest);
 
-        if ($updateUserRequest->pass !== null && $updateUserRequest->pass !== '') {
-            if ($this->users->userExists($updateUserRequest->login, $updateUserRequest->pass, $user->getId())) {
-                return $this->json(['error' => 'duplicate_entry'], Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
-
-            $user->setPass($this->passwordHasher->hashPassword($user, $updateUserRequest->pass));
-        }
-
-        $this->em->flush();
-
-        return $this->json(
-            $user,
-            Response::HTTP_OK,
-            [],
-            ['groups' => 'user:read']
-        );
+        return $this->json(UserResponse::fromEntity($user), Response::HTTP_OK);
     }
 
     #[Route('/{id}', requirements: ['id' => '\d+'], methods: ['DELETE'])]
@@ -112,8 +68,7 @@ class UsersController extends AbstractController
     {
         $this->denyAccessUnlessGranted(UserAccess::DELETE, $user);
 
-        $this->em->remove($user);
-        $this->em->flush();
+        $this->userService->delete($user);
 
         return new JsonResponse(
             null,
